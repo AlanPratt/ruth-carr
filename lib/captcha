@@ -1,0 +1,120 @@
+<?php
+
+class captcha
+{
+	private static $loaded = false;
+	private static $session = 'rbcaptchasessionkey';
+	
+	public function init()
+	{
+		if(self::$loaded) { return; } self::$loaded = true;
+		
+	}	
+	
+	public function number()
+	{
+		$first = rand(1, 9);
+		$second = rand(1, 9);
+		$_SESSION[self::$session] = ($first+$second);
+		return "What is ". self::make_num($first)." add ". self::make_num($second)." ? ".
+		'<input type="text" name="_rbcaptchasesionvar" class="captcha" style="width:50px;" accept="true" 
+			alt="Security question" maxlength="4" autocomplete="off" />';	
+	}
+	
+	public function is_valid($value=NULL)
+	{
+		if(is_null($value)) { $value = (int)$_REQUEST['_rbcaptchasesionvar']; }
+		return ($_SESSION[self::$session]==$value?true:false);
+	}
+	
+	private function make_num($num)
+	{
+		$num = (int) $num;
+		if ($num < 0) return "negative".self::convert_tri(-$num, 0);
+		if ($num == 0) return "zero";
+		return self::convert_tri($num, 0);
+	}
+	
+	private function convert_tri($num, $tri) {
+	  //global $ones, $tens, $triplets;
+	
+	  // chunk the number, ...rxyy
+	  $r = (int) ($num / 1000);
+	  $x = ($num / 100) % 10;
+	  $y = $num % 100;
+	
+	  // init the output string
+	  $str = "";
+	
+	  // do hundreds
+	  if ($x > 0)
+	   $str = self::$ones[$x] . " hundred";
+	
+	  // do ones and tens
+	  if ($y < 20)
+	   $str .= self::$ones[$y];
+	  else
+	   $str .= self::$tens[(int) ($y / 10)] . self::$ones[$y % 10];
+	
+	  // add triplet modifier only if there
+	  // is some output to be modified...
+	  if ($str != "")
+	   $str .= self::$triplets[$tri];
+	
+	  // continue recursing?
+	  if ($r > 0)
+	   return convertTri($r, $tri+1).$str;
+	  else
+	   return $str;
+	}
+	
+	private static $ones = array(
+	 "",
+	 " one",
+	 " two",
+	 " three",
+	 " four",
+	 " five",
+	 " six",
+	 " seven",
+	 " eight",
+	 " nine",
+	 " ten",
+	 " eleven",
+	 " twelve",
+	 " thirteen",
+	 " fourteen",
+	 " fifteen",
+	 " sixteen",
+	 " seventeen",
+	 " eighteen",
+	 " nineteen"
+	);
+
+	private static $tens = array(
+	 "",
+	 "",
+	 " twenty",
+	 " thirty",
+	 " forty",
+	 " fifty",
+	 " sixty",
+	 " seventy",
+	 " eighty",
+	 " ninety"
+	);
+
+	private static $triplets = array(
+	 "",
+	 " thousand",
+	 " million",
+	 " billion",
+	 " trillion",
+	 " quadrillion",
+	 " quintillion",
+	 " sextillion",
+	 " septillion",
+	 " octillion",
+	 " nonillion"
+	);
+}

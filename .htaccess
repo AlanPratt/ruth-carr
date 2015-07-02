@@ -1,0 +1,21 @@
+
+Options +FollowSymLinks
+RewriteEngine on
+RewriteCond %{HTTP_HOST} ^hespandjones\.co.uk
+RewriteRule ^(.*)$ http://www.hespandjones.co.uk$1  [R=301,L]
+
+RewriteCond %{REQUEST_FILENAME} /admin$
+RewriteRule ^(.*) http://www.bowhouse-secure.co.uk/cms/?_referer=%{HTTP_HOST} [R=301,L]
+
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteBase /
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+#RewriteRule ^(.+) ./index.php/$1 [L]
+RewriteRule .* index.php?/$1 [PT,L,QSA]
+</IfModule>
+
+<Files ~ "^[^\.]+$">
+ForceType application/x-httpd-php
+</Files>

@@ -1,0 +1,354 @@
+<?php
+define('mem', md5('mem'));
+if(!is_array($_SESSION[mem])) $_SESSION[mem] = array();
+
+class fn extends cms
+{
+	private static $objects = array();	
+	private static $data = array();	
+	
+	public function add_object($key, $object)
+	{
+		self::$objects[$key] = $object[0];	
+	}
+	
+	public function call_object()
+    {
+    	$args = func_get_args();
+    	$key = $args[0]; $method = $args[1]; $opts = array_slice($args, 2); $opts = $opts[0];
+    	
+    	
+    	if(!array_key_exists($key, self::$objects)) 
+    		self::error(__FILE__.':'.__LINE__.":Cannot call method '$key.$method'", 'Area 51 (fn)');
+    	$object = self::$objects[$key]; 
+    	if(is_callable(array($object, $method))) { return call_user_method_array($method, $object, $opts); }
+    	return $object->data[$method];
+    }
+	
+	public function error($message='No nice message sent.') 
+	{ 
+		//fn('page.header');
+		echo '<p class="message error">'.$message.'</p>';
+		//fn('page.footer');
+		exit();
+	}
+	
+	public function email($content, $name, $email)
+	{
+		$n = '<br />'.n;
+		$html = "
+		Contact from $name ($email) via ".site_title."$n
+		===================================================$n
+		$n $n
+		$content $n
+		$n $n
+		===================================================$n
+		$n $n
+		Info$n
+		========$n
+		Sent: ".fn::now()."$n
+		IP: {$_SERVER['REMOTE_ADDR']}$n
+		Ref: {$_SERVER['HTTP_REFERER']}$n 	
+		";
+		return $html;
+	}
+	
+	public function send_email($in)
+	{	//send email
+		require_once('mailer');
+		unset($m);
+		$m = new mailer();
+		if(isset($in['is_html'])) $m->IsHTML($in['is_html']);
+		else $m->IsHTML(false);
+		
+		if(is_array($in['to'])) foreach($in['to'] as $arr) $m->to($arr[0], $arr[1]);
+		else $m->to($in['to_email'], $in['to_name']);
+		
+		if(is_array($in['from'])) foreach($in['from'] as $arr) $m->from($arr[0], $arr[1]);
+		else $m->from($in['from_email'], $in['from_name']);
+		
+		if(is_array($in['cc'])) foreach($in['cc'] as $arr) $m->cc($arr[0], $arr[1]);
+		else $m->cc($in['cc_email'], $in['cc_name']);
+		
+		if(is_array($in['bcc'])) foreach($in['bcc'] as $arr) $m->bcc($arr[0], $arr[1]);
+		else $m->bcc($in['bcc_email'], $in['bcc_name']);
+		
+		$m->subject($in['subject']);
+		$m->body_html($in['html']);
+		$m->body_alt($in['plain']);
+		
+		return $m->Send();
+	}
+	
+	public function is_ajax()
+	{
+		$h = $_SERVER['HTTP_X_REQUESTED_WITH'];
+		if(!empty($h) && strtolower($h) == 'xmlhttprequest') return true;	
+		return false;
+	}
+	
+	public function mem($k, $v=NULL)
+	{
+		if(is_array($v) || $v) return $_SESSION[mem][$k] = $v;
+		return $_SESSION[mem][$k];	
+	}
+	
+	public function data($k, $v=NULL)
+	{
+		if(!is_array(self::$data)) self::$data = array();
+		if($v) return self::$data[$k] = $v;
+		return self::$data[$k];
+	}
+	
+	public function add_http_header($type=NULL)
+	{
+		if(!$type) return;
+		switch($type):
+		case 'plain': case 'text':
+			header('Content-Type:text/plain');
+		break;
+		case 'html':
+			header('Content-Type:text/html');
+		break;
+		case 'json':
+			header('Content-Type:text/json');
+			header('Content-type: application/json');
+		break;
+		case 'xml':
+			header("content-type: text/xml");
+			echo '<?xml version="1.0" encoding="UTF-8" ?>'.n;
+		break;
+		case 'jpeg': case 'jpg':
+			header('Content-Type: image/jpeg');
+		break;
+		case 'gif':
+			header('Content-Type: image/gif');
+		break;
+		case 'png':
+			header('Content-Type: image/png');
+		break;
+		case '404':
+			header("HTTP/1.0 404 Not Found"); 
+		break;
+		endswitch;
+	}
+	
+	public function encrypt($str, $secret=false) {
+	  global $fn;  if(!$secret) $secret = secret;
+	  $keys = array(); $output = '';
+	  for($i = 0; $i < strlen($secret); $i++):
+	    $keys[$i] = ord(substr($secret, $i, 1));
+	  endfor;
+	  for($i = 0; $i < strlen($str); $i++):
+	    $output.= chr(ord(substr($str, $i, 1)) ^ ($keys[$i % strlen($secret)]));
+	  endfor;
+	  return bin2hex($output);
+	}
+	
+	public function decrypt($str, $secret=false) 
+	{
+	  global $fn;  if(!$secret) $secret = secret;
+	  $str = hex2bin($str); $keys = array(); $output = '';
+	  for($i = 0; $i < strlen($secret); $i++):
+	    $keys[$i] = ord(substr($secret, $i, 1));
+	  endfor;
+	  for($i = 0; $i < strlen($str); $i++):
+	    $output.= chr(ord(substr($str, $i, 1)) ^ ($keys[$i % strlen($secret)]));
+	  endfor;
+	  return ($output);
+	}
+	
+	public function rci($key, $type=NULL) { return self::ci($_REQUEST[$key], $type); }
+	public function ci($v, $t='text')
+	{
+		switch($t):
+		case 'url': 
+			$old = array(' ', '&', '&amp;', '%26amp%3B', '//', ',', "'");
+			$new = array('-', 'and', 'and', 'and', '/', '-', '');
+			$v = str_replace($old, $new, strtolower($v));
+			$v = filter_var($v, FILTER_SANITIZE_URL); 
+		break;
+		case 'email': $v = filter_var(strtolower($v), FILTER_SANITIZE_EMAIL); break;
+		case 'plain': $v = filter_var($v, FILTER_SANITIZE_STRING); break;
+		case 'ios':
+			$old = array('&rsquo;', '&amp;', '&#039;');
+			$new = array("'", "&", "'");
+			$v = str_replace($old, $new, $v);
+			return $v;
+		break;
+		case 'number': 
+			$v = filter_var($v, FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION | FILTER_FLAG_ALLOW_THOUSAND | FILTER_FLAG_ALLOW_SCIENTIFIC); 
+		break;
+		case 'text':
+			$old = array('&lt;', '&gt;');
+			$new = array('<', '>'); //html_entity_decode
+			$v = str_replace($old, $new, htmlentities($v, ENT_HTML5 | ENT_QUOTES, "UTF-8"));
+		break;
+		endswitch;
+		return $v;	
+	}
+	
+	public function extend($defs, $ins)
+	{	//copy of jQuery's extend function
+		$opts = array();
+		if(!is_array($ins)) return $defs;
+		foreach($ins as $k=>$v):
+			$opts[$k] = $ins[$k];
+		endforeach;	
+		foreach($defs as $k=>$v):
+			if(!array_key_exists($k, $opts)) { $opts[$k] = $defs[$k]; }
+		endforeach;
+		return $opts;
+	}
+	
+	public function short_text($text, $size="20") 
+	{	//shorten text to size
+		$text = strip_tags($text);
+		if(strlen($text) > $size): $ps = str_split($text, $size); return $ps[0]."...";
+		else: return $text; endif;
+	}
+    
+    public function now() { return date('Y-m-d H:i:s'); }
+	public function date($date, $diff=NULL)
+	{	//3hours ago etc
+		$format = "D, jS M Y";
+		$format = "Y-m-d H:i:s";
+		if(is_numeric($date)) $ts = $date;
+		else $ts = strtotime($date);
+		if(is_bool($diff)):
+			return self::_human_time_diff($ts);
+		elseif($diff):
+			return self::_human_time_diff($ts, $diff);
+		else:
+		
+			return date($format , $ts);
+		endif;
+	}
+
+	private function _human_time_diff($timestamp, $from=NULL)
+	{
+		if(strstr($timestamp, '-')) return 'recently';
+		if(strlen($timestamp)<3) $timestamp = mktime();
+		if($from) $ts = $from;
+		else $ts = time();
+		$difference = $ts - $timestamp;
+		$periods = array("sec", "min", "hour", "day", "week", "month", "year", "decade");
+		$lengths = array("60","60","24","7","4.35","12","10");
+		
+		if ($difference > 0): 
+			// this was in the past
+			$ending = "ago";
+		else: 
+			// this was in the future
+			$difference = -$difference;
+			$ending = "to go";
+		endif;
+
+		for($j = 0; $difference >= $lengths[$j]+1; $j++)
+		{
+	
+			$difference /= $lengths[$j];
+		}
+	
+		$difference = round($difference);
+		if($difference != 1) $periods[$j].= "s";
+		$text = "$difference $periods[$j] $ending";
+		return $text;
+	}
+	
+	public function dir($path)
+	{
+		$files = array();
+		if(!is_readable($path)) return $files;
+		$d = dir($path); //$d->handle $d->path
+		while (false !== ($file = $d->read())): $files[$path.$file] = $file; endwhile;
+		$d->close();	
+		return $files;
+	}
+	
+	public function fields($arr, $replace='data_', $keep_orig_ks=true)
+	{
+		if(!is_array($arr)) return $arr;
+		foreach($arr as $k=>$v):
+			//if(is_array($v)) { $arr[$k] = $this->fields($v, $replace, $keep_orig_ks); }
+			$nk = str_replace($replace, '', $k);
+			$arr[$nk] = $v;
+			if($k != $nk) { unset($arr[$k]); }
+			if(!$keep_orig_ks) { unset($arr[$k]); }
+		endforeach;	
+		return $arr;
+	}
+	
+	public function select_options($opts, $key=NULL)
+	{
+		$html = '';
+		foreach($opts as $k=>$v):
+			$html .= '<option value="'.$k.'" '.($key==$k?'SELECTED':'').'>'.$v.'</option>'.n;
+		endforeach;
+		return $html;
+	}
+	
+	public function actives($key=NULL)
+	{
+		$actives = array('0'=>'No', '1'=>'Yes');
+		if(strlen($key)==0) return $actives;
+		else return $actives[$key];
+	}
+	
+	public function sql(array $opts=array())
+	{
+		$limit = $opts['limit']; 
+		$order = $opts['order'];
+		$q = $opts['q'];
+		unset($opts['limit'], $opts['order'], $opts['q']);
+		$sql = '';
+		foreach($opts as $k=>$v):
+			$sql .= " AND $k = '$v' ";
+		endforeach;
+		if(empty($limit)) $limit = '50';
+		if(!empty($order)) $sql .= " ORDER BY $order ";
+		return $sql." LIMIT $limit";	
+	}
+	
+	public function keywords(array $arr=array())
+	{
+		if(empty($arr)) return '';
+		$rtn = '';
+		foreach($arr as $k=>$v) $rtn .= ' '.$v.' ';
+		return $rtn;
+	}
+	
+	public function redirect($url, $type=NULL)
+	{
+		header("Location:$url");
+		exit();
+	}
+}
+
+
+
+if(!function_exists('parse_ini_string'))
+{
+  function parse_ini_string($ini, $process_sections = true, $scanner_mode = null)
+  {
+    # Generate a temporary file.
+    $tempname = tempnam('/tmp', 'ini');
+    $fp = fopen($tempname, 'w');
+    fwrite($fp, $ini);
+    $ini = parse_ini_file($tempname, !empty($process_sections));
+    fclose($fp);
+    @unlink($tempname);
+    return $ini;
+  }
+}
+
+if(!function_exists('hex2bin')):
+	function hex2bin($hex)
+	{
+   	 return preg_replace('#(\w)(\w)#e', "chr(hexdec('$1$2'))", $hex);
+	}
+endif;
+
+function is_active($page, $test) {
+	return ($page['url']==$test['url']?'class="active"':'');
+}

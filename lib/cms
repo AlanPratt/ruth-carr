@@ -1,0 +1,253 @@
+<?php
+
+class cms
+{	
+	public function reqs($key=0)
+	{
+		$reqs = fn::data('site.reqs');
+		if(!is_array($reqs) || empty($reqs)): 
+			$reqs = array();
+			$uri = $_SERVER['REDIRECT_URL'];
+			if(strlen(ext)>1):
+				$ps = explode(ext, $uri);
+				$uri = $ps[1];
+			else: $uri = $uri; endif;
+			$ps = explode(d, $uri);
+			foreach($ps as $p) if(!empty($p)) $reqs[] = fn::ci($p, 'url');
+			fn::data('site.reqs', $reqs);
+		endif;
+		if($key==0) return $reqs;
+		return $reqs[$key];	
+	}
+	
+	public function add_style($url)
+	{
+		$styles = fn::data('page.styles');
+		if(!is_array($styles)) $styles = array();
+		$styles[] = $url;
+		fn::data('page.styles', $styles);
+	}
+	
+	public function add_script($url)
+	{
+		$scripts = fn::data('page.scripts');
+		if(!is_array($scripts)) $scripts = array();
+		$scripts[] = $url;
+		fn::data('page.scripts', $scripts);
+	}
+	
+	public function add_header($append=NULL)
+	{
+		if(!$append) { return fn::data('cms.header_html'); }
+		$html = fn::data('cms.header_html');
+		$html .= $append;
+		fn::data('cms.header_html', $html);
+	}
+	public function get_header() { return fn::data('cms.header_html'); }
+	
+	public function add_footer($append=NULL)
+	{
+		if(!$append) { return fn::data('cms.footer_html'); }
+		$html = fn::data('cms.footer_html');
+		$html .= $append;
+		fn::data('cms.footer_html', $html);
+	}
+	public function get_footer() { return fn::data('cms.footer_html'); }
+	
+	public function check_data(array $data=array())
+	{
+		if(empty($data)) { return $data; } 
+		$data['data_c10'] = @unserialize($data['data_c10']); 
+		if(!is_array($data['data_c10'])) { $data['data_c10'] = array('priority'=>'0.8', 'changefreq'=>'weekly', 'index'=>'index, follow'); }
+		if($data['data_url']=='index') { $data['data_url'] = '/'; }
+		if($data['data_int']=='/index') { $data['data_int'] = '/'; }
+		return fn::fields($data, 'data_');
+	}
+	
+	public function get_data($type='page', $url='')
+	{
+		if(empty($url)) $url = 'index';
+		if(is_numeric($url)) $where = " d.data_id = '$url' "; else $where = " d.data_url = '$url' ";
+		$sql = "SELECT d.*, count(childs.data_id) as data_children FROM datas as d 
+		LEFT JOIN datas AS childs ON childs.data_parent_id = d.data_id 
+		WHERE d.data_type = '$type' AND $where AND d.data_active = '1' AND d.data_site_id = '".site_id."' 
+		GROUP BY d.data_id LIMIT 1";
+		$data = fn('db.one', $sql);
+		if(empty($data)) { return array(); }
+		return self::check_data($data);
+	}
+	
+	public function get_random_data($type='page')
+	{
+		$sql = "SELECT d.*, count(childs.data_id) as data_children FROM datas as d 
+		LEFT JOIN datas AS childs ON childs.data_parent_id = d.data_id 
+		WHERE d.data_type = '$type' AND d.data_active = '1' AND d.data_site_id = '".site_id."' 
+		GROUP BY d.data_id ORDER BY RAND() LIMIT 1";
+		$data = fn('db.one', $sql);
+		if(empty($data)) { return array(); }
+		return self::check_data($data);
+	}
+	
+	public function get_datas($type='page', $par_id=0)
+	{
+		$sql = "SELECT d.*, count(childs.data_id) as data_children FROM datas as d 
+		LEFT JOIN datas AS childs ON childs.data_parent_id = d.data_id 
+		WHERE d.data_active = '1' AND d.data_type = '$type' AND d.data_site_id = '".site_id."' AND d.data_parent_id = '$par_id' 
+		GROUP BY d.data_id ORDER BY d.data_sequence ASC";
+		$rows = fn('db.get', $sql);
+		$datas = array();
+		foreach($rows as $row):
+			$datas['data_'.$row['data_id']] = self::check_data($row);
+		endforeach;
+		return $datas;
+	}
+
+	public function get_datas_by_order($type='page', $order='d.data_sequence ASC', $par_id=0)
+	{
+		$sql = "SELECT d.*, count(childs.data_id) as data_children FROM datas as d 
+		LEFT JOIN datas AS childs ON childs.data_parent_id = d.data_id 
+		WHERE d.data_active = '1' AND d.data_type = '$type' AND d.data_site_id = '".site_id."' AND d.data_parent_id = '$par_id' 
+		GROUP BY d.data_id ORDER BY $order";
+		$rows = fn('db.get', $sql);
+		$datas = array();
+		foreach($rows as $row):
+			$datas['data_'.$row['data_id']] = self::check_data($row);
+		endforeach;
+		return $datas;
+	}
+	
+	public function get_tag($type='tag', $url='')
+	{
+		if(is_numeric($url)) $where = " t.tag_id = '$url' "; else $where = " t.tag_url = '$url' ";
+		$sql = "SELECT t.*, count(childs.tag_id) as tag_children FROM tags as t 
+		LEFT JOIN tags AS childs ON childs.tag_parent_id = t.tag_id 
+		WHERE t.tag_type = '$type' AND $where AND t.tag_active = '1' AND t.tag_site_id = '".site_id."' 
+		GROUP BY t.tag_id LIMIT 1";
+		return fn::fields(fn('db.one', $sql), 'tag_');
+	}
+	
+	public function get_tags($type='tag', $par_id=0)
+	{
+		$sql = "SELECT t.*, count(childs.tag_id) as children FROM tags as t 
+		LEFT JOIN tags AS childs ON childs.tag_parent_id = t.tag_id 
+		WHERE t.tag_type = '$type' AND t.tag_parent_id = '$par_id'
+			AND t.tag_active = '1' AND t.tag_site_id = '".site_id."' 
+			GROUP BY t.tag_id ORDER BY t.tag_sequence ASC";
+		$rows = fn('db.get', $sql);
+		$tags = array();
+		foreach($rows as $row) $tags['tag_'.$row['tag_id']] = fn::fields($row, 'tag_');
+		return $tags;
+	}
+	
+	public function get_datas_with_tag($type='page', $tag_id=0, $par_id=NULL)
+	{
+		$sql = "SELECT d.*, count(childs.data_id) as data_children FROM lookups as l, datas as d 
+		LEFT JOIN datas as childs ON childs.data_parent_id = d.data_id   
+		WHERE d.data_active = '1' AND d.data_type = '$type' AND d.data_site_id = '".site_id."' 
+		".(!is_null($par_id)?" AND d.data_parent_id = '$par_id' ":"")." 
+		AND l.lookup_type = 'data-tag' AND l.lookup_parent_id = d.data_id AND l.lookup_child_id = '$tag_id' 
+		GROUP BY d.data_id ORDER BY l.lookup_sequence ASC";
+		$rows = fn('db.get', $sql);
+		$datas = array(); 
+		foreach($rows as $row) { $datas['data_'.$row['data_id']] = self::check_data($row); }
+		return $datas;
+	}
+
+	public function get_datas_with_tag_limit($type='page', $tag_id=0, $par_id=NULL, $limit='LIMIT 1')
+	{
+		$sql = "SELECT d.*, count(childs.data_id) as data_children FROM lookups as l, datas as d 
+		LEFT JOIN datas as childs ON childs.data_parent_id = d.data_id   
+		WHERE d.data_active = '1' AND d.data_type = '$type' AND d.data_site_id = '".site_id."' 
+		".(!is_null($par_id)?" AND d.data_parent_id = '$par_id' ":"")." 
+		AND l.lookup_type = 'data-tag' AND l.lookup_parent_id = d.data_id AND l.lookup_child_id = '$tag_id' 
+		GROUP BY d.data_id ORDER BY l.lookup_sequence ASC $limit";
+		$rows = fn('db.get', $sql);
+		$datas = array(); 
+		foreach($rows as $row) { $datas['data_'.$row['data_id']] = self::check_data($row); }
+		return $datas;
+	}
+	
+	public function get_medias($data_id=0, $filter=NULL)
+	{
+		return self::get_data_with_datas('media', $data_id, $filter);
+	}
+	
+	public function get_data_with_datas($type='page', $data_id=0, $filter=NULL)
+	{
+		$sql = "SELECT d.*, l.* FROM datas as d, lookups as l  
+		WHERE d.data_active = '1' AND d.data_type = '$type' AND d.data_site_id = '".site_id."' 
+		AND l.lookup_type = 'data-data' AND l.lookup_child_id = d.data_id AND l.lookup_parent_id = '$data_id' 
+		".(is_null($filter)?"":" AND l.lookup_filter = '$filter' ")."
+		GROUP BY d.data_id ORDER BY l.lookup_sequence ASC";
+		//echo $sql;
+		$rows = fn('db.get', $sql);
+		$datas = array();
+		foreach($rows as $row) { $datas['data_'.$row['data_id']] = self::check_data($row); }
+		return $datas;
+	}
+	
+	public function sitemap()
+	{
+		$reqs = fn::reqs(); if($reqs[0]!='sitemap.xml') { return; }
+		fn::add_http_header('xml'); $site_url = rtrim(site_url, '/');
+
+
+		echo '<urlset
+      xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
+            http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">'.n;
+		
+		echo self::_sitemap_entry(array('url'=>'/', 'modified'=>fn::now(), 'priority'=>'1.0', 'changefreq'=>'always'));
+		$datas = fn('db.get', "SELECT data_int, data_modified, data_c10 FROM datas WHERE data_active = '1' AND data_type = 'page'");
+		//pa($datas);
+		foreach($datas as $data): $data = self::check_data($data); 
+			echo self::_sitemap_entry(array('url'=>$site_url.$data['int'], 'modified'=>$data['modified'], 'priority'=>$data['c10']['priority'], 'changefreq'=>$data['c10']['changefreq']));
+		endforeach;
+/*		
+		foreach(fn::get_tags('category', 0) as $par):
+			echo self::_sitemap_entry(array('url'=>'/products/'.$par['url'], 'modified'=>$par['modified'], 
+				'priority'=>'0.7', 'changefreq'=>'weekly'));
+			if($par['children']>0):
+				foreach(fn::get_tags('category', $par['id']) as $child):
+					echo self::_sitemap_entry(array('url'=>'/products/'.$par['url'].d.$child['url'], 
+					'modified'=>$child['modified'], 'priority'=>'0.7', 'changefreq'=>'weekly'));
+				endforeach;
+			endif;
+		endforeach;
+*/		
+		echo '</urlset>'.n;
+		die();	
+	}
+	
+	private function _sitemap_entry(array $opts=array())
+	{
+		if(empty($opts)) return '';
+		$xml = '<url>'.n;
+		$xml .= t.'<loc>'.$opts['url'].'</loc>'.n;
+		$xml .= t.'<lastmod>'.date("Y-m-d", strtotime($opts['modified'])).'</lastmod>'.n;
+		$xml .= t.'<changefreq>'.$opts['changefreq'].'</changefreq>'.n;
+		$xml .= t.'<priority>'.$opts['priority'].'</priority>'.n;
+		$xml .= '</url>'.n;
+		return $xml;
+	}
+	
+	function get_rss($url, $count=NULL)
+    {
+    	$rss = new DOMDocument();
+    	$rss->load($url);
+    	$feed = array();
+    	foreach($rss->getElementsByTagName('item') as $node):
+    		$title = $node->getElementsByTagName('title')->item(0)->nodeValue;
+    		$title = str_replace(' & ', ' &amp; ', $title);
+    		$date = $node->getElementsByTagName('pubDate')->item(0)->nodeValue;
+    		$date = date('l F d, Y', strtotime($date));
+    		$feed[] = array('title' => $title,
+	    	'description' => $node->getElementsByTagName('description')->item(0)->nodeValue,
+	    	'url' => $node->getElementsByTagName('link')->item(0)->nodeValue,
+	    	'date' => $date);
+    	endforeach;
+    	if(!is_null($count)) { return array_slice($feed, 0, $count); }
+    	return $feed;
+    }
+}

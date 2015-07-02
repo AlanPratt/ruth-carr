@@ -1,0 +1,163 @@
+<?php
+
+class mysql
+{
+	private $conn = false;
+	private $history = array();
+	
+	public function __construct($host, $db, $user, $pass)
+	{
+		$this->conn = @mysql_connect($host, $user, $pass) or $this->throw_error('cannot connect to host');
+		@mysql_select_db($db, $this->conn) or $this->throw_error('cannot select db');
+	}	
+	
+	public function __destruct()
+	{
+		$this->close();	
+	}
+	
+	public function close()
+	{
+		@mysql_close($this->conn);	
+	}
+	
+	private function throw_error($str='')
+	{
+		die('MYSQL error: '.@mysql_error($this->conn).' on '.$this->comment.' '.$str);
+	}
+	
+	public function error()
+	{
+			
+	}
+	
+	public function ok()
+	{
+		
+	}
+	
+	public function get_conn()
+	{
+		if($this->connected()) return $this->conn;
+		else return false;
+	}
+	
+	public function connected()
+	{
+		$type = get_resource_type($this->conn);
+		return($type == 'mysql link')?true:false;
+	}
+	
+	public function one($sql)
+	{
+		$rows = $this->get($sql);
+		if($rows[0]) return $rows[0];
+		return array();
+	}
+	
+	public function get($sql, $index=false)
+	{
+		$arr = array();
+		$rows = $this->query($sql);
+		while($row = $this->_fetch($rows, $index)):
+			if($index): $key = $row[$index]; unset($row[$index]); $arr[$key] = $row;
+			else: $arr[] = $row; endif;
+		endwhile;
+		return $arr;
+	}
+	
+	public function query($sql, $notes=NULL)
+	{
+		$data = @mysql_query($sql, $this->conn) or $this->throw_error();
+		$this->history[] = array('sql'=>$sql, 'notes'=>$notes);
+		return $data;	
+	}
+	
+	public function insert($arr, $table, $prefix='')
+	{
+		$fields = array(); $values = array();
+		foreach($arr as $k=>$v):
+			$fields[] = $prefix.$k;
+			$values[] = $this->ci($v);
+		endforeach;
+		$sql = "INSERT into $table (".implode(",", $fields).") VALUES ('".implode("','", $values)."') ";
+		return $this->query($sql);
+	}
+
+	public function update($arr, $table, $where, $prefix='')
+	{
+		$sql = ""; $c=0; $t = count($arr);
+		foreach($arr as $k=>$v):
+			$k = $prefix.$k;
+			$sql .= " $k = '".$this->ci($v)."'";
+			if($c < $t-1) $sql .= ", ";
+			++$c;
+		endforeach;
+		$sql = "UPDATE $table SET $sql WHERE $where ";
+		return $this->query($sql);
+	}
+	
+	public function fields($table)
+	{
+		$rtn = array();
+		$fields = $this->query("SHOW COLUMNS FROM $table");
+		while($field = $this->fetch($fields)):
+			$arr = array();
+			$arr['field'] = $field['Field'];
+			$arr['type'] = $field['Type'];
+			$arr['null'] = $field['Null'];
+			$arr['key'] = $field['Key'];
+			$arr['default'] = $field['Default'];
+			$arr['extra'] = $field['Extra'];
+			$rtn[$arr['field']] = $arr;
+		endwhile;
+		return $rtn;
+	}
+	
+	public function tables()
+	{
+		$rtn = array();
+		$tables = $this->query("show tables;");
+		while($table = $this->fetch($tables)):
+			$arr = array();
+			$key = key($table);
+			$val = $table[$key];
+			$rtn[$val] = $val;
+		endwhile;
+		return $rtn;
+	}	
+	
+	public function size($data)
+	{	//size of queried data
+		return @mysql_num_rows($data);	
+	}
+	
+	public function insert_id()
+	{	//return last inserted ID
+		return @mysql_insert_id($this->db);
+	}
+
+	public function ci($str)
+	{	//clean inputs
+		if($this->convert) 
+		{
+			return mysql_real_escape_string(urlencode(stripslashes($str)));
+		}
+		return mysql_real_escape_string(stripslashes($str));	
+	}
+	
+	public function get_history()
+	{
+		return $this->history;	
+	}
+	
+	private function _fetch($data)
+	{	//fetch array
+		if($row = @mysql_fetch_array($data, MYSQL_ASSOC)) 
+		{
+			$rtn = array(); 
+			foreach($row as $k=>$v) $rtn[$k] = ($v);
+			return $rtn;
+		}
+	}
+}
